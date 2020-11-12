@@ -107,7 +107,7 @@ fn parse_dict(_s: Peekable<Chars>) -> Result<BData, ParseErr> {
 #[cfg(test)]
 mod test {
     fn parse_char(s: &str) -> String {
-        let v = super::parse(s.chars()).unwrap_or(super::BData::BString("".to_string()));
+        let v = super::parse(s).unwrap_or(super::BData::BString("".to_string()));
         if let super::BData::BString(data) = v {
             return data;
         } else {
@@ -122,7 +122,7 @@ mod test {
     #[test]
     fn parse_number_test() {
         let num = String::from("i322e");
-        let obj = super::parse(num.chars()).expect("parse err");
+        let obj = super::parse(&num).expect("parse err");
         if let super::BData::Number(v) = obj {
             assert_eq!(v, 322);
             return;
