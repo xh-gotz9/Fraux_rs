@@ -17,18 +17,24 @@ pub struct ParseErr {
 pub fn parse(s: &str) -> Result<BData, ParseErr> {
     let mut peekable = s.chars().peekable();
     let c = peekable.peek().unwrap();
-    match c {
-        '0'..='9' => parse_string(peekable),
-        'i' => parse_number(peekable),
-        'l' => parse_list(peekable),
-        'd' => parse_dict(peekable),
+    let res = match c {
+        '0'..='9' => parse_string(&mut peekable),
+        'i' => parse_number(&mut peekable),
+        'l' => parse_list(&mut peekable),
+        'd' => parse_dict(&mut peekable),
         _ => Err(ParseErr {
             message: String::from("非法字符"),
         }),
+    };
+
+    if peekable.peek().is_some() {
+        let after: String = peekable.collect();
+        println!("WARNING: unused data: {}", after);
     }
+    res
 }
 
-fn parse_number(mut s: Peekable<Chars>) -> Result<BData, ParseErr> {
+fn parse_number(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     if s.next().expect("没有数据") != 'i' {
         return Err(ParseErr {
             message: "解析错误".to_string(),
@@ -65,7 +71,7 @@ fn parse_number(mut s: Peekable<Chars>) -> Result<BData, ParseErr> {
     Ok(BData::Number(v))
 }
 
-pub fn parse_string(mut s: Peekable<Chars>) -> Result<BData, ParseErr> {
+pub fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     let mut len = 0;
     loop {
         let c = s.next().unwrap();
@@ -96,11 +102,11 @@ pub fn parse_string(mut s: Peekable<Chars>) -> Result<BData, ParseErr> {
     Ok(BData::BString(bstr))
 }
 
-fn parse_list(_s: Peekable<Chars>) -> Result<BData, ParseErr> {
+fn parse_list(_s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     Ok(BData::List(Rc::new(vec![])))
 }
 
-fn parse_dict(_s: Peekable<Chars>) -> Result<BData, ParseErr> {
+fn parse_dict(_s: &Peekable<Chars>) -> Result<BData, ParseErr> {
     Ok(BData::Dict(Rc::new(HashMap::new())))
 }
 
@@ -117,6 +123,8 @@ mod test {
     #[test]
     fn parse_string_test() {
         assert_eq!(parse_char("3:abc"), "abc");
+        assert_eq!(parse_char("3:abcd"), "abc");
+        assert_eq!(parse_char("0:"), "");
     }
 
     #[test]
