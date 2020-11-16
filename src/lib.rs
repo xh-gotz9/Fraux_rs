@@ -11,17 +11,21 @@ pub enum BData {
 
 pub fn parse(s: &str) -> Result<BData, String> {
     let mut peekable = s.chars().peekable();
-    let c = peekable.peek().unwrap();
+    parse_data(&mut peekable)
+}
+
+fn parse_data(mut s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
+    let c = s.peek().unwrap();
     let res = match c {
-        '0'..='9' => parse_string(&mut peekable),
-        'i' => parse_number(&mut peekable),
-        'l' => parse_list(&mut peekable),
-        'd' => parse_dict(&mut peekable),
+        '0'..='9' => parse_string(&mut s),
+        'i' => parse_number(&mut s),
+        'l' => parse_list(&mut s),
+        'd' => parse_dict(&mut s),
         _ => return Err(String::from("非法字符")),
     };
 
-    if peekable.peek().is_some() {
-        let after: String = peekable.collect();
+    if s.peek().is_some() {
+        let after: String = s.collect();
         println!("WARNING: unused data: {}", after);
     }
     res
