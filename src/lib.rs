@@ -102,8 +102,37 @@ pub fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
     Ok(BData::BString(bstr))
 }
 
-fn parse_list(_s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
-    Ok(BData::List(Rc::new(vec![])))
+fn parse_list(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
+    let c = s.next();
+    if let Some('l') = c {
+        let mut list = std::vec::Vec::new();
+        loop {
+            let p = s.peek();
+            match p {
+                Some('e') => {
+                    // 结束
+                    s.next();
+                    return Ok(BData::List(Rc::new(list)));
+                }
+                Some(_) => {
+                    let v = parse_data(s);
+                    match v {
+                        Ok(data) => {
+                            list.push(data);
+                        }
+                        Err(_) => {
+                            return v;
+                        }
+                    };
+                }
+                None => {
+                    return Err("数据错误".to_string());
+                }
+            }
+        }
+    } else {
+        return Err("格式错误".to_string());
+    }
 }
 
 fn parse_dict(_s: &Peekable<Chars>) -> Result<BData, String> {
@@ -112,9 +141,12 @@ fn parse_dict(_s: &Peekable<Chars>) -> Result<BData, String> {
 
 #[cfg(test)]
 mod test {
+    use super::BData;
+    use std::rc::Rc;
+
     fn parse_bstring(s: &str) -> Result<String, &str> {
         let v = super::parse(s);
-        if let Ok(super::BData::BString(data)) = v {
+        if let Ok(BData::BString(data)) = v {
             Ok(data)
         } else {
             Err("err")
@@ -132,7 +164,7 @@ mod test {
 
     fn parse_num(s: &str) -> Result<i32, &str> {
         let v = super::parse(s);
-        if let Ok(super::BData::Number(data)) = v {
+        if let Ok(BData::Number(data)) = v {
             Ok(data)
         } else {
             Err("err")
@@ -145,5 +177,52 @@ mod test {
         assert_eq!(parse_num("i-32e"), Ok(-32));
         assert_eq!(parse_num("i0e"), Ok(0));
         assert_eq!(parse_num("i3.2e"), Err("err"));
+    }
+
+    fn parse_list(s: &str) -> Result<Rc<Vec<BData>>, &str> {
+        let v = super::parse(s);
+        if let Ok(BData::List(rc)) = v {
+            Ok(rc)
+        } else {
+            Err("err")
+        }
+    }
+
+    fn parse_list_check<'b>(s: &'static str, check: &Vec<BData>) {
+        let v = parse_list(s);
+        match v {
+            Ok(rc) => {
+                let mut ch = check.iter();
+                for e in rc.iter() {
+                    if let Some(data) = ch.next() {
+                        assert_eq!(data, e);
+                    } else {
+                        assert!(false);
+                    }
+                }
+            }
+            Err(_) => assert!(false),
+        };
+    }
+
+    #[test]
+    fn parse_list_test() {
+        // parse_list_check("le", &vec![]);
+        parse_list_check("l3:abce", &vec![BData::BString("abc".to_string())]);
+        parse_list_check(
+            "l3:abc4:abcde",
+            &vec![
+                BData::BString("abc".to_string()),
+                BData::BString("abcd".to_string()),
+            ],
+        );
+        parse_list_check(
+            "l3:abci32el2:abee",
+            &vec![
+                BData::BString("abc".to_string()),
+                BData::Number(32),
+                BData::List(Rc::new(vec![BData::BString("ab".to_string())])),
+            ],
+        );
     }
 }
