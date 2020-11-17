@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::str::Chars;
 use std::{collections::HashMap, iter::Peekable};
 
+#[derive(Eq, PartialEq, Debug)]
 pub enum BData {
     BString(String),
     Number(i32),
@@ -11,23 +12,23 @@ pub enum BData {
 
 pub fn parse(s: &str) -> Result<BData, String> {
     let mut peekable = s.chars().peekable();
-    parse_data(&mut peekable)
+    let v = parse_data(&mut peekable);
+    if let Some(_) = peekable.peek() {
+        let after: String = peekable.collect();
+        println!("WARNING: unused data: {}", after);
+    }
+    v
 }
 
 fn parse_data(mut s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
-    let c = s.peek().unwrap();
-    let res = match c {
-        '0'..='9' => parse_string(&mut s),
-        'i' => parse_number(&mut s),
-        'l' => parse_list(&mut s),
-        'd' => parse_dict(&mut s),
-        _ => return Err(String::from("非法字符")),
+    let res = match s.peek() {
+        Some('0'..='9') => parse_string(&mut s),
+        Some('i') => parse_number(&mut s),
+        Some('l') => parse_list(&mut s),
+        Some('d') => parse_dict(&mut s),
+        None | Some(_) => return Err(String::from("非法字符")),
     };
 
-    if s.peek().is_some() {
-        let after: String = s.collect();
-        println!("WARNING: unused data: {}", after);
-    }
     res
 }
 
