@@ -34,42 +34,35 @@ fn parse_data(mut s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
 
 fn parse_number(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
     let cv = s.next();
-    match cv {
-        Some(c) => {
-            if c != 'i' {
-                return Err("解析错误".to_string());
-            }
-        }
-        None => {
-            return Err("解析错误".to_string());
-        }
-    }
-
-    let mut symb = false;
-    let mut num = String::from("");
-    loop {
-        let v = s.next().expect("没有数据");
-        match v {
-            '0'..='9' => {
-                num.push(v);
-            }
-            '+' | '-' => {
-                if symb {
-                    return Err("格式错误".to_string());
-                } else {
-                    num.push(v);
-                    symb = true;
+    if let Some('i') = cv {
+        let mut symb = false;
+        let mut num = String::from("");
+        loop {
+            let v = s.next();
+            match v {
+                Some('0'..='9') => {
+                    num.push(v.unwrap());
+                }
+                Some('+') | Some('-') => {
+                    if symb {
+                        return Err("格式错误".to_string());
+                    } else {
+                        num.push(v.unwrap());
+                        symb = true;
+                    }
+                }
+                Some('e') => break,
+                Some(_) | None => {
+                    return Err("解析错误".to_string());
                 }
             }
-            'e' => break,
-            _ => {
-                return Err("解析错误".to_string());
-            }
         }
-    }
-    let v: i32 = num.parse::<i32>().expect("格式错误");
+        let v: i32 = num.parse::<i32>().expect("格式错误");
 
-    Ok(BData::Number(v))
+        Ok(BData::Number(v))
+    } else {
+        return Err("解析错误".to_string());
+    }
 }
 
 pub fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
