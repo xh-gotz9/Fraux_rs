@@ -135,14 +135,48 @@ fn parse_list(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
     }
 }
 
-fn parse_dict(_s: &Peekable<Chars>) -> Result<BData, String> {
-    Ok(BData::Dict(Rc::new(HashMap::new())))
+fn parse_dict(s: &mut Peekable<Chars>) -> Result<BData, String> {
+    let p = s.next();
+    if let Some('d') = p {
+        let mut map = HashMap::new();
+        loop {
+            let p = s.peek();
+
+            match p {
+                Some('e') => {
+                    s.next();
+                    return Ok(BData::Dict(Rc::new(map)));
+                }
+                Some(_) => {
+                    let key;
+                    if let Ok(BData::BString(k)) = parse_string(s) {
+                        key = k;
+                    } else {
+                        return Err("格式错误".to_string());
+                    }
+
+                    let v = parse_data(s);
+                    match v {
+                        Ok(data) => {
+                            map.insert(key, data);
+                        }
+                        Err(_) => return v,
+                    }
+                }
+                None => {
+                    return Err("数据错误".to_string());
+                }
+            }
+        }
+    } else {
+        return Err("格式错误".to_string());
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::BData;
-    use std::rc::Rc;
+    use std::{collections::HashMap, rc::Rc};
 
     fn parse_bstring(s: &str) -> Result<String, &str> {
         let v = super::parse(s);
@@ -224,5 +258,44 @@ mod test {
                 BData::List(Rc::new(vec![BData::BString("ab".to_string())])),
             ],
         );
+    }
+
+    fn parse_dict(s: &str) -> Result<Rc<HashMap<String, BData>>, &str> {
+        let v = super::parse(s);
+        if let Ok(BData::Dict(rc)) = v {
+            Ok(rc)
+        } else {
+            Err("err")
+        }
+    }
+
+    fn parse_dict_check(s: &str, map: &HashMap<String, BData>) {
+        let data = parse_dict(s);
+        if let Ok(m) = data {
+            let m = m.as_ref();
+            assert_eq!(m.len(), map.len());
+            m.iter().for_each(|x| {
+                assert_eq!(map.contains_key(x.0), true);
+                assert_eq!(x.1, map.get(x.0).unwrap());
+            });
+        }
+    }
+
+    #[test]
+    fn parse_dict_test() {
+        // parse_dict_check("de", &HashMap::new());
+        let source = "d2:k13:abce";
+        let mut m = HashMap::new();
+        m.insert("k1".to_string(), BData::BString("abc".to_string()));
+        parse_dict_check(source, &m);
+
+        let mut m = HashMap::new();
+        let source = "d2:k13:abc2:k2l3:defi-23eee";
+        m.insert("k1".to_string(), BData::BString("abc".to_string()));
+        let mut k2_list = Vec::new();
+        k2_list.push(BData::BString("def".to_string()));
+        k2_list.push(BData::Number(-23));
+        m.insert("k2".to_string(), BData::List(Rc::new(k2_list)));
+        parse_dict_check(source, &m);
     }
 }
