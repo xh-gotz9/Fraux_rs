@@ -234,7 +234,7 @@ mod test {
 
     #[test]
     fn parse_list_test() {
-        // parse_list_check("le", &vec![]);
+        parse_list_check("le", &vec![]);
         parse_list_check("l3:abce", &vec![BData::BString("abc".to_string())]);
         parse_list_check(
             "l3:abc4:abcde",
@@ -276,7 +276,7 @@ mod test {
 
     #[test]
     fn parse_dict_test() {
-        // parse_dict_check("de", &HashMap::new());
+        parse_dict_check("de", &HashMap::new());
         let source = "d2:k13:abce";
         let mut m = HashMap::new();
         m.insert("k1".to_string(), BData::BString("abc".to_string()));
