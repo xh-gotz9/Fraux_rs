@@ -65,7 +65,7 @@ fn parse_number(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
     }
 }
 
-pub fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
+fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
     let mut len = 0;
     loop {
         let v = s.next();
@@ -164,6 +164,90 @@ fn parse_dict(s: &mut Peekable<Chars>) -> Result<BData, String> {
     } else {
         return Err("格式错误".to_string());
     }
+}
+
+pub fn stringify(data: &BData) -> Result<String, &str> {
+    let res = match data {
+        BData::BString(s) => stringify_string(s),
+        BData::Number(num) => stringify_number(num.clone()),
+        BData::List(vec) => stringify_list(vec),
+        BData::Dict(dict) => stringify_dict(dict),
+    };
+    res
+}
+
+fn stringify_number(data: i32) -> Result<String, &'static str> {
+    let mut content = String::new();
+    content.push('i');
+    content.push_str(&format!("{}", data));
+    content.push('e');
+    Ok(content)
+}
+
+fn stringify_string(data: &str) -> Result<String, &str> {
+    let mut content = String::new();
+    content.push_str(&format!("{}", data.len()));
+    content.push(':');
+    content.push_str(data);
+    Ok(content)
+}
+
+fn stringify_list(data: &Rc<Vec<BData>>) -> Result<String, &str> {
+    let mut content = String::new();
+    let mut err_str = "";
+    content.push('l');
+    if !data.iter().all(|x| match stringify(x) {
+        Ok(s) => {
+            content.push_str(&s);
+            return true;
+        }
+        Err(s) => {
+            err_str = s;
+            return false;
+        }
+    }) {
+        return Err(err_str);
+    }
+
+    content.push('e');
+    Ok(content)
+}
+
+fn stringify_dict(data: &Rc<HashMap<String, BData>>) -> Result<String, &str> {
+    let mut content = String::new();
+    content.push('d');
+    let mut err_str = "";
+    if !data.iter().all(|x| {
+        let mut pair = String::new();
+        let key = stringify_string(x.0);
+        match key {
+            Ok(s) => {
+                pair.push_str(&s);
+            }
+            Err(s) => {
+                err_str = s;
+                return false;
+            }
+        }
+
+        let value = stringify(x.1);
+        match value {
+            Ok(s) => {
+                pair.push_str(&s);
+            }
+            Err(s) => {
+                err_str = s;
+                return false;
+            }
+        };
+        content.push_str(&pair);
+        return true;
+    }) {
+        return Err(err_str);
+    }
+
+    content.push('e');
+    Ok(content)
 }
 
 #[cfg(test)]
@@ -290,5 +374,27 @@ mod test {
         k2_list.push(BData::Number(-23));
         m.insert("k2".to_string(), BData::List(Rc::new(k2_list)));
         parse_dict_check(source, &m);
+    }
+
+    fn assert_stringify(s: &str) {
+        if let Ok(data) = super::parse(s) {
+            let stringify = super::stringify(&data);
+            println!("parse: {}", s);
+            if let Ok(st) = stringify {
+                assert_eq!(st, s);
+            } else {
+                panic!("stringify error!");
+            }
+        } else {
+            panic!("parse error!");
+        }
+    }
+
+    #[test]
+    fn stringify_test() {
+        assert_stringify("3:abc");
+        assert_stringify("3:lsd");
+        assert_stringify("ld2:k12:v1ei32ee");
+        // assert_stringify("d4:key14:val14:key24:val24:key34:val34:key44:val4e");
     }
 }
