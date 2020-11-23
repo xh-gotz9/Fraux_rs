@@ -1,13 +1,13 @@
 use std::rc::Rc;
 use std::str::Chars;
-use std::{collections::HashMap, iter::Peekable};
+use std::{collections::BTreeMap, iter::Peekable};
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum BData {
     BString(String),
     Number(i32),
     List(Rc<Vec<BData>>),
-    Dict(Rc<HashMap<String, BData>>),
+    Dict(Rc<BTreeMap<String, BData>>),
 }
 
 pub fn parse(s: &str) -> Result<BData, String> {
@@ -131,7 +131,7 @@ fn parse_list(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
 fn parse_dict(s: &mut Peekable<Chars>) -> Result<BData, String> {
     let p = s.next();
     if let Some('d') = p {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         loop {
             let p = s.peek();
 
@@ -213,7 +213,7 @@ fn stringify_list(data: &Rc<Vec<BData>>) -> Result<String, &str> {
     Ok(content)
 }
 
-fn stringify_dict(data: &Rc<HashMap<String, BData>>) -> Result<String, &str> {
+fn stringify_dict(data: &Rc<BTreeMap<String, BData>>) -> Result<String, &str> {
     let mut content = String::new();
     content.push('d');
     let mut err_str = "";
@@ -253,7 +253,8 @@ fn stringify_dict(data: &Rc<HashMap<String, BData>>) -> Result<String, &str> {
 #[cfg(test)]
 mod test {
     use super::BData;
-    use std::{collections::HashMap, rc::Rc};
+    use std::collections::BTreeMap;
+    use std::rc::Rc;
 
     fn parse_bstring(s: &str) -> Result<String, &str> {
         let v = super::parse(s);
@@ -337,7 +338,7 @@ mod test {
         );
     }
 
-    fn parse_dict(s: &str) -> Result<Rc<HashMap<String, BData>>, &str> {
+    fn parse_dict(s: &str) -> Result<Rc<BTreeMap<String, BData>>, &str> {
         let v = super::parse(s);
         if let Ok(BData::Dict(rc)) = v {
             Ok(rc)
@@ -346,7 +347,7 @@ mod test {
         }
     }
 
-    fn parse_dict_check(s: &str, map: &HashMap<String, BData>) {
+    fn parse_dict_check(s: &str, map: &BTreeMap<String, BData>) {
         let data = parse_dict(s);
         if let Ok(m) = data {
             let m = m.as_ref();
@@ -360,13 +361,13 @@ mod test {
 
     #[test]
     fn parse_dict_test() {
-        parse_dict_check("de", &HashMap::new());
+        parse_dict_check("de", &BTreeMap::new());
         let source = "d2:k13:abce";
-        let mut m = HashMap::new();
+        let mut m = BTreeMap::new();
         m.insert("k1".to_string(), BData::BString("abc".to_string()));
         parse_dict_check(source, &m);
 
-        let mut m = HashMap::new();
+        let mut m = BTreeMap::new();
         let source = "d2:k13:abc2:k2l3:defi-23eee";
         m.insert("k1".to_string(), BData::BString("abc".to_string()));
         let mut k2_list = Vec::new();
@@ -376,12 +377,12 @@ mod test {
         parse_dict_check(source, &m);
     }
 
-    fn assert_stringify(s: &str) {
+    fn assert_stringify(s: &str, assert_s: &str) {
         if let Ok(data) = super::parse(s) {
             let stringify = super::stringify(&data);
             println!("parse: {}", s);
             if let Ok(st) = stringify {
-                assert_eq!(st, s);
+                assert_eq!(st, assert_s);
             } else {
                 panic!("stringify error!");
             }
@@ -392,9 +393,15 @@ mod test {
 
     #[test]
     fn stringify_test() {
-        assert_stringify("3:abc");
-        assert_stringify("3:lsd");
-        assert_stringify("ld2:k12:v1ei32ee");
-        // assert_stringify("d4:key14:val14:key24:val24:key34:val34:key44:val4e");
+        let s = "3:abc";
+        assert_stringify(s, s);
+        let s = "3:lsd";
+        assert_stringify(s, s);
+        let s = "ld2:k12:v1ei32ee";
+        assert_stringify(s, s);
+
+        let s = "d4:key24:val24:key14:val14:key34:val34:key44:val43:key3:vale";
+        let assert_s = "d3:key3:val4:key14:val14:key24:val24:key34:val34:key44:val4e";
+        assert_stringify(s, assert_s);
     }
 }
