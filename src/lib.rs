@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::rc::Rc;
 use std::str::Chars;
 use std::{collections::BTreeMap, iter::Peekable};
@@ -10,7 +11,16 @@ pub enum BData {
     Dict(Rc<BTreeMap<String, BData>>),
 }
 
-pub fn parse(s: &str) -> Result<BData, String> {
+pub enum ParseErr {
+    /// 数据格式错误
+    SyntaxError,
+    /// 数据缺失
+    DataException,
+    /// 转换中出现的异常
+    ParseFailure(Box<dyn Error>),
+}
+
+pub fn parse(s: &str) -> Result<BData, ParseErr> {
     let mut peekable = s.chars().peekable();
     let v = parse_data(&mut peekable);
     if let Some(_) = peekable.peek() {
@@ -20,52 +30,60 @@ pub fn parse(s: &str) -> Result<BData, String> {
     v
 }
 
-fn parse_data(mut s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
+fn parse_data(mut s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     let res = match s.peek() {
         Some('0'..='9') => parse_string(&mut s),
         Some('i') => parse_number(&mut s),
         Some('l') => parse_list(&mut s),
         Some('d') => parse_dict(&mut s),
-        None | Some(_) => return Err(String::from("非法字符")),
+        Some(_) => return Err(ParseErr::SyntaxError),
+        None => return Err(ParseErr::DataException),
     };
 
     res
 }
 
-fn parse_number(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
+fn parse_number(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     let cv = s.next();
-    if let Some('i') = cv {
-        let mut symb = false;
-        let mut num = String::from("");
-        loop {
-            let v = s.next();
-            match v {
-                Some('0'..='9') => {
-                    num.push(v.unwrap());
-                }
-                Some('+') | Some('-') => {
-                    if symb {
-                        return Err("格式错误".to_string());
-                    } else {
+    match cv {
+        Some('i') => {
+            let mut symb = false;
+            let mut num = String::from("");
+            loop {
+                let v = s.next();
+                match v {
+                    Some('0'..='9') => {
                         num.push(v.unwrap());
-                        symb = true;
                     }
+                    Some('+') | Some('-') => {
+                        if symb {
+                            return Err(ParseErr::SyntaxError);
+                        } else {
+                            num.push(v.unwrap());
+                            symb = true;
+                        }
+                    }
+                    Some('e') => break,
+                    Some(_) => return Err(ParseErr::SyntaxError),
+                    None => return Err(ParseErr::DataException),
                 }
-                Some('e') => break,
-                Some(_) | None => {
-                    return Err("解析错误".to_string());
+            }
+            let v = num.parse::<i32>();
+            match v {
+                Ok(n) => {
+                    return Ok(BData::Number(n));
+                }
+                Err(e) => {
+                    return Err(ParseErr::ParseFailure(Box::new(e)));
                 }
             }
         }
-        let v: i32 = num.parse::<i32>().expect("格式错误");
-
-        Ok(BData::Number(v))
-    } else {
-        return Err("解析错误".to_string());
+        Some(_) => return Err(ParseErr::SyntaxError),
+        None => return Err(ParseErr::DataException),
     }
 }
 
-fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
+fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     let mut len = 0;
     loop {
         let v = s.next();
@@ -76,7 +94,8 @@ fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
             Some(':') => {
                 break;
             }
-            None | Some(_) => return Err("格式错误".to_string()),
+            Some(_) => return Err(ParseErr::SyntaxError),
+            None => return Err(ParseErr::DataException),
         }
     }
 
@@ -84,85 +103,88 @@ fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
     let mut bstr = String::from("");
 
     while i < len {
-        if let Some(c) = s.next() {
-            bstr.push(c);
-            i += 1;
-        } else {
-            return Err("格式错误".to_string());
+        match s.next() {
+            Some(c) => {
+                bstr.push(c);
+                i += 1;
+            }
+            None => return Err(ParseErr::DataException),
         }
     }
 
     Ok(BData::BString(bstr))
 }
 
-fn parse_list(s: &mut Peekable<Chars<'_>>) -> Result<BData, String> {
+fn parse_list(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     let c = s.next();
-    if let Some('l') = c {
-        let mut list = std::vec::Vec::new();
-        loop {
-            let p = s.peek();
-            match p {
-                Some('e') => {
-                    // 结束
-                    s.next();
-                    return Ok(BData::List(Rc::new(list)));
-                }
-                Some(_) => {
-                    let v = parse_data(s);
-                    match v {
-                        Ok(data) => {
-                            list.push(data);
-                        }
-                        Err(_) => {
-                            return v;
-                        }
-                    };
-                }
-                None => {
-                    return Err("数据错误".to_string());
+    match c {
+        Some('l') => {
+            let mut list = std::vec::Vec::new();
+            loop {
+                let p = s.peek();
+                match p {
+                    Some('e') => {
+                        s.next();
+                        return Ok(BData::List(Rc::new(list)));
+                    }
+                    Some(_) => {
+                        let v = parse_data(s);
+                        match v {
+                            Ok(data) => {
+                                list.push(data);
+                            }
+                            Err(_) => {
+                                return v;
+                            }
+                        };
+                    }
+                    None => {
+                        return Err(ParseErr::DataException);
+                    }
                 }
             }
         }
-    } else {
-        return Err("格式错误".to_string());
+        Some(_) => return Err(ParseErr::SyntaxError),
+        None => return Err(ParseErr::DataException),
     }
 }
 
-fn parse_dict(s: &mut Peekable<Chars>) -> Result<BData, String> {
+fn parse_dict(s: &mut Peekable<Chars>) -> Result<BData, ParseErr> {
     let p = s.next();
-    if let Some('d') = p {
-        let mut map = BTreeMap::new();
-        loop {
-            let p = s.peek();
+    match p {
+        Some('d') => {
+            let mut map = BTreeMap::new();
+            loop {
+                let p = s.peek();
 
-            match p {
-                Some('e') => {
-                    s.next();
-                    return Ok(BData::Dict(Rc::new(map)));
-                }
-                Some(_) => {
-                    let key;
-                    if let Ok(BData::BString(k)) = parse_string(s) {
-                        key = k;
-                    } else {
-                        return Err("格式错误".to_string());
+                match p {
+                    Some('e') => {
+                        s.next();
+                        return Ok(BData::Dict(Rc::new(map)));
                     }
-
-                    let v = parse_data(s);
-                    match v {
-                        Ok(data) => {
-                            map.insert(key, data);
+                    Some(_) => {
+                        let data = parse_string(s);
+                        let key;
+                        match data {
+                            Ok(BData::BString(k)) => key = k,
+                            Ok(_) => return Err(ParseErr::SyntaxError),
+                            Err(_) => return data,
                         }
-                        Err(_) => return v,
+
+                        let v = parse_data(s);
+                        match v {
+                            Ok(data) => {
+                                map.insert(key, data);
+                            }
+                            Err(_) => return v,
+                        }
                     }
-                }
-                None => {
-                    return Err("数据错误".to_string());
+                    None => return Err(ParseErr::DataException),
                 }
             }
         }
-    } else {
-        return Err("格式错误".to_string());
+        Some(_) => return Err(ParseErr::SyntaxError),
+        None => return Err(ParseErr::DataException),
     }
 }
 
@@ -289,6 +311,10 @@ mod test {
         assert_eq!(parse_num("i-32e"), Ok(-32));
         assert_eq!(parse_num("i0e"), Ok(0));
         assert_eq!(parse_num("i3.2e"), Err("err"));
+        assert_eq!(
+            parse_num(&format!("i{}e", i64::MAX).to_string()),
+            Err("err")
+        );
     }
 
     fn parse_list(s: &str) -> Result<Rc<Vec<BData>>, &str> {
