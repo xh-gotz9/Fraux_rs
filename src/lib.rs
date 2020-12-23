@@ -1,11 +1,11 @@
+use core::slice::Iter;
 use std::error::Error;
 use std::rc::Rc;
-use std::str::Chars;
 use std::{collections::BTreeMap, iter::Peekable};
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum BData {
-    BString(String),
+    BString(Vec<u8>),
     Number(i32),
     List(Rc<Vec<BData>>),
     Dict(Rc<BTreeMap<String, BData>>),
@@ -21,21 +21,18 @@ pub enum ParseErr {
 }
 
 pub fn parse(s: &str) -> Result<BData, ParseErr> {
-    let mut peekable = s.chars().peekable();
+    let data: Vec<u8> = s.as_bytes().to_vec();
+    let mut peekable: Peekable<Iter<'_, u8>> = data.iter().peekable();
     let v = parse_data(&mut peekable);
-    if let Some(_) = peekable.peek() {
-        let after: String = peekable.collect();
-        println!("WARNING: unused data: {}", after);
-    }
     v
 }
 
-fn parse_data(mut s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
+fn parse_data(mut s: &mut Peekable<Iter<u8>>) -> Result<BData, ParseErr> {
     let res = match s.peek() {
-        Some('0'..='9') => parse_string(&mut s),
-        Some('i') => parse_number(&mut s),
-        Some('l') => parse_list(&mut s),
-        Some('d') => parse_dict(&mut s),
+        Some(b'0'..=b'9') => parse_string(&mut s),
+        Some(b'i') => parse_number(&mut s),
+        Some(b'l') => parse_list(&mut s),
+        Some(b'd') => parse_dict(&mut s),
         Some(_) => return Err(ParseErr::SyntaxError),
         None => return Err(ParseErr::DataException),
     };
@@ -43,39 +40,44 @@ fn parse_data(mut s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     res
 }
 
-fn parse_number(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
+fn parse_number(s: &mut Peekable<Iter<u8>>) -> Result<BData, ParseErr> {
     let cv = s.next();
     match cv {
-        Some('i') => {
+        Some(b'i') => {
             let mut symb = false;
-            let mut num = String::from("");
+            let mut num = Vec::new();
             loop {
                 let v = s.next();
                 match v {
-                    Some('0'..='9') => {
-                        num.push(v.unwrap());
+                    Some(b'0'..=b'9') => {
+                        num.push(v.unwrap().clone());
                     }
-                    Some('+') | Some('-') => {
+                    Some(b'+') | Some(b'-') => {
                         if symb {
                             return Err(ParseErr::SyntaxError);
                         } else {
-                            num.push(v.unwrap());
+                            num.push(v.unwrap().clone());
                             symb = true;
                         }
                     }
-                    Some('e') => break,
+                    Some(b'e') => break,
                     Some(_) => return Err(ParseErr::SyntaxError),
                     None => return Err(ParseErr::DataException),
                 }
             }
-            let v = num.parse::<i32>();
-            match v {
-                Ok(n) => {
-                    return Ok(BData::Number(n));
+            let v = String::from_utf8(num).and_then(|s| Ok(s.parse::<i32>()));
+
+            if let Ok(v) = v {
+                match v {
+                    Ok(n) => {
+                        return Ok(BData::Number(n));
+                    }
+                    Err(e) => {
+                        return Err(ParseErr::ParseFailure(Box::new(e)));
+                    }
                 }
-                Err(e) => {
-                    return Err(ParseErr::ParseFailure(Box::new(e)));
-                }
+            } else {
+                return Err(ParseErr::ParseFailure(Box::new(v.unwrap_err())));
             }
         }
         Some(_) => return Err(ParseErr::SyntaxError),
@@ -83,15 +85,15 @@ fn parse_number(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     }
 }
 
-fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
+fn parse_string(s: &mut Peekable<Iter<u8>>) -> Result<BData, ParseErr> {
     let mut len = 0;
     loop {
         let v = s.next();
         match v {
-            Some('0'..='9') => {
-                len = len * 10 + (v.unwrap() as u8 - b'0');
+            Some(b'0'..=b'9') => {
+                len = len * 10 + (v.unwrap() - b'0');
             }
-            Some(':') => {
+            Some(b':') => {
                 break;
             }
             Some(_) => return Err(ParseErr::SyntaxError),
@@ -100,12 +102,12 @@ fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     }
 
     let mut i = 0;
-    let mut bstr = String::from("");
+    let mut bstr = Vec::new();
 
     while i < len {
         match s.next() {
             Some(c) => {
-                bstr.push(c);
+                bstr.push(c.clone());
                 i += 1;
             }
             None => return Err(ParseErr::DataException),
@@ -115,15 +117,15 @@ fn parse_string(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     Ok(BData::BString(bstr))
 }
 
-fn parse_list(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
+fn parse_list(s: &mut Peekable<Iter<u8>>) -> Result<BData, ParseErr> {
     let c = s.next();
     match c {
-        Some('l') => {
+        Some(b'l') => {
             let mut list = std::vec::Vec::new();
             loop {
                 let p = s.peek();
                 match p {
-                    Some('e') => {
+                    Some(b'e') => {
                         s.next();
                         return Ok(BData::List(Rc::new(list)));
                     }
@@ -149,16 +151,16 @@ fn parse_list(s: &mut Peekable<Chars<'_>>) -> Result<BData, ParseErr> {
     }
 }
 
-fn parse_dict(s: &mut Peekable<Chars>) -> Result<BData, ParseErr> {
+fn parse_dict(s: &mut std::iter::Peekable<std::slice::Iter<'_, u8>>) -> Result<BData, ParseErr> {
     let p = s.next();
     match p {
-        Some('d') => {
+        Some(b'd') => {
             let mut map = BTreeMap::new();
             loop {
                 let p = s.peek();
 
                 match p {
-                    Some('e') => {
+                    Some(b'e') => {
                         s.next();
                         return Ok(BData::Dict(Rc::new(map)));
                     }
@@ -171,12 +173,14 @@ fn parse_dict(s: &mut Peekable<Chars>) -> Result<BData, ParseErr> {
                             Err(_) => return data,
                         }
 
-                        let v = parse_data(s);
-                        match v {
-                            Ok(data) => {
-                                map.insert(key, data);
+                        if let Ok(k) = String::from_utf8(key) {
+                            let v = parse_data(s);
+                            match v {
+                                Ok(data) => {
+                                    map.insert(k, data);
+                                }
+                                Err(_) => return v,
                             }
-                            Err(_) => return v,
                         }
                     }
                     None => return Err(ParseErr::DataException),
@@ -188,39 +192,39 @@ fn parse_dict(s: &mut Peekable<Chars>) -> Result<BData, ParseErr> {
     }
 }
 
-pub fn stringify(data: &BData) -> Result<String, &str> {
+pub fn stringify(data: &BData) -> Result<Vec<u8>, &str> {
     let res = match data {
         BData::BString(s) => stringify_string(s),
-        BData::Number(num) => stringify_number(num.clone()),
+        BData::Number(num) => stringify_number(num),
         BData::List(vec) => stringify_list(vec),
         BData::Dict(dict) => stringify_dict(dict),
     };
     res
 }
 
-fn stringify_number(data: i32) -> Result<String, &'static str> {
-    let mut content = String::new();
-    content.push('i');
-    content.push_str(&format!("{}", data));
-    content.push('e');
+fn stringify_number(data: &i32) -> Result<Vec<u8>, &'static str> {
+    let mut content = Vec::new();
+    content.push(b'i');
+    content.append(&mut format!("{}", data).as_bytes().to_vec());
+    content.push(b'e');
     Ok(content)
 }
 
-fn stringify_string(data: &str) -> Result<String, &str> {
-    let mut content = String::new();
-    content.push_str(&format!("{}", data.len()));
-    content.push(':');
-    content.push_str(data);
+fn stringify_string(data: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
+    let mut content = Vec::new();
+    content.append(&mut format!("{}", data.len()).as_bytes().to_vec());
+    content.push(b':');
+    content.append(&mut data.clone());
     Ok(content)
 }
 
-fn stringify_list(data: &Rc<Vec<BData>>) -> Result<String, &str> {
-    let mut content = String::new();
+fn stringify_list(data: &Rc<Vec<BData>>) -> Result<Vec<u8>, &str> {
+    let mut content = Vec::new();
     let mut err_str = "";
-    content.push('l');
-    if !data.iter().all(|x| match stringify(x) {
+    content.push(b'l');
+    if !data.iter().all(|x| match stringify(x).as_mut() {
         Ok(s) => {
-            content.push_str(&s);
+            content.append(s);
             return true;
         }
         Err(s) => {
@@ -231,20 +235,19 @@ fn stringify_list(data: &Rc<Vec<BData>>) -> Result<String, &str> {
         return Err(err_str);
     }
 
-    content.push('e');
+    content.push(b'e');
     Ok(content)
 }
 
-fn stringify_dict(data: &Rc<BTreeMap<String, BData>>) -> Result<String, &str> {
-    let mut content = String::new();
-    content.push('d');
+fn stringify_dict(data: &Rc<BTreeMap<String, BData>>) -> Result<Vec<u8>, &str> {
+    let mut content = Vec::new();
+    content.push(b'd');
     let mut err_str = "";
     if !data.iter().all(|x| {
-        let mut pair = String::new();
-        let key = stringify_string(x.0);
+        let key = stringify_string(&x.0.as_bytes().to_vec());
         match key {
-            Ok(s) => {
-                pair.push_str(&s);
+            Ok(mut s) => {
+                content.append(&mut s);
             }
             Err(s) => {
                 err_str = s;
@@ -254,21 +257,20 @@ fn stringify_dict(data: &Rc<BTreeMap<String, BData>>) -> Result<String, &str> {
 
         let value = stringify(x.1);
         match value {
-            Ok(s) => {
-                pair.push_str(&s);
+            Ok(mut s) => {
+                content.append(&mut s);
             }
             Err(s) => {
                 err_str = s;
                 return false;
             }
         };
-        content.push_str(&pair);
         return true;
     }) {
         return Err(err_str);
     }
 
-    content.push('e');
+    content.push(b'e');
     Ok(content)
 }
 
@@ -281,7 +283,7 @@ mod test {
     fn parse_bstring(s: &str) -> Result<String, &str> {
         let v = super::parse(s);
         if let Ok(BData::BString(data)) = v {
-            Ok(data)
+            Ok(String::from_utf8(data).unwrap())
         } else {
             Err("err")
         }
@@ -346,20 +348,20 @@ mod test {
     #[test]
     fn parse_list_test() {
         parse_list_check("le", &vec![]);
-        parse_list_check("l3:abce", &vec![BData::BString("abc".to_string())]);
+        parse_list_check("l3:abce", &vec![BData::BString("abc".as_bytes().to_vec())]);
         parse_list_check(
             "l3:abc4:abcde",
             &vec![
-                BData::BString("abc".to_string()),
-                BData::BString("abcd".to_string()),
+                BData::BString("abc".as_bytes().to_vec()),
+                BData::BString("abcd".as_bytes().to_vec()),
             ],
         );
         parse_list_check(
             "l3:abci32el2:abee",
             &vec![
-                BData::BString("abc".to_string()),
+                BData::BString("abc".as_bytes().to_vec()),
                 BData::Number(32),
-                BData::List(Rc::new(vec![BData::BString("ab".to_string())])),
+                BData::List(Rc::new(vec![BData::BString("ab".as_bytes().to_vec())])),
             ],
         );
     }
@@ -390,20 +392,20 @@ mod test {
         parse_dict_check("de", &BTreeMap::new());
         let source = "d2:k13:abce";
         let mut m = BTreeMap::new();
-        m.insert("k1".to_string(), BData::BString("abc".to_string()));
+        m.insert("k1".to_string(), BData::BString("abc".as_bytes().to_vec()));
         parse_dict_check(source, &m);
 
         let mut m = BTreeMap::new();
         let source = "d2:k13:abc2:k2l3:defi-23eee";
-        m.insert("k1".to_string(), BData::BString("abc".to_string()));
+        m.insert("k1".to_string(), BData::BString("abc".as_bytes().to_vec()));
         let mut k2_list = Vec::new();
-        k2_list.push(BData::BString("def".to_string()));
+        k2_list.push(BData::BString("def".as_bytes().to_vec()));
         k2_list.push(BData::Number(-23));
         m.insert("k2".to_string(), BData::List(Rc::new(k2_list)));
         parse_dict_check(source, &m);
     }
 
-    fn assert_stringify(s: &str, assert_s: &str) {
+    fn assert_stringify(s: &str, assert_s: Vec<u8>) {
         if let Ok(data) = super::parse(s) {
             let stringify = super::stringify(&data);
             println!("parse: {}", s);
@@ -420,14 +422,16 @@ mod test {
     #[test]
     fn stringify_test() {
         let s = "3:abc";
-        assert_stringify(s, s);
+        assert_stringify(s, s.as_bytes().to_vec());
         let s = "3:lsd";
-        assert_stringify(s, s);
+        assert_stringify(s, s.as_bytes().to_vec());
         let s = "ld2:k12:v1ei32ee";
-        assert_stringify(s, s);
+        assert_stringify(s, s.as_bytes().to_vec());
 
         let s = "d4:key24:val24:key14:val14:key34:val34:key44:val43:key3:vale";
-        let assert_s = "d3:key3:val4:key14:val14:key24:val24:key34:val34:key44:val4e";
+        let assert_s = "d3:key3:val4:key14:val14:key24:val24:key34:val34:key44:val4e"
+            .as_bytes()
+            .to_vec();
         assert_stringify(s, assert_s);
     }
 }
