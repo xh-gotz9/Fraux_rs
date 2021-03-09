@@ -10,7 +10,7 @@ pub enum BData {
     List(Rc<Vec<BData>>),
     Dict(Rc<BTreeMap<String, BData>>),
 }
-
+#[derive(Debug)]
 pub enum ParseErr {
     /// 数据格式错误
     SyntaxError,
