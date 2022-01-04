@@ -7,7 +7,7 @@ use std::{collections::BTreeMap, iter::Peekable};
 pub enum BData {
     BString(Vec<u8>),
     Number(i32),
-    List(Rc<Vec<BData>>),
+    List(Vec<BData>),
     Dict(BTreeMap<String, BData>),
 }
 #[derive(Debug)]
@@ -126,7 +126,7 @@ fn parse_list(s: &mut Peekable<Iter<u8>>) -> Result<BData, ParseErr> {
                 match p {
                     Some(b'e') => {
                         s.next();
-                        return Ok(BData::List(Rc::new(list)));
+                        return Ok(BData::List(list));
                     }
                     Some(_) => {
                         let v = parse_data(s);
@@ -217,7 +217,7 @@ fn stringify_string(data: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
     Ok(content)
 }
 
-fn stringify_list(data: &Rc<Vec<BData>>) -> Result<Vec<u8>, &str> {
+fn stringify_list(data: &Vec<BData>) -> Result<Vec<u8>, &str> {
     let mut content = Vec::new();
     let mut err_str = "";
     content.push(b'l');
