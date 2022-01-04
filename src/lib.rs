@@ -8,7 +8,7 @@ pub enum BData {
     BString(Vec<u8>),
     Number(i32),
     List(Rc<Vec<BData>>),
-    Dict(Rc<BTreeMap<String, BData>>),
+    Dict(BTreeMap<String, BData>),
 }
 #[derive(Debug)]
 pub enum ParseErr {
@@ -161,7 +161,7 @@ fn parse_dict(s: &mut std::iter::Peekable<std::slice::Iter<'_, u8>>) -> Result<B
                 match p {
                     Some(b'e') => {
                         s.next();
-                        return Ok(BData::Dict(Rc::new(map)));
+                        return Ok(BData::Dict(map));
                     }
                     Some(_) => {
                         let data = parse_string(s);
@@ -238,7 +238,7 @@ fn stringify_list(data: &Rc<Vec<BData>>) -> Result<Vec<u8>, &str> {
     Ok(content)
 }
 
-fn stringify_dict(data: &Rc<BTreeMap<String, BData>>) -> Result<Vec<u8>, &str> {
+fn stringify_dict(data: &BTreeMap<String, BData>) -> Result<Vec<u8>, &str> {
     let mut content = Vec::new();
     content.push(b'd');
     let mut err_str = "";
