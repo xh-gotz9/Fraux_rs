@@ -84,12 +84,12 @@ fn parse_number(s: &mut Peekable<Iter<u8>>) -> Result<BData, ParseErr> {
 }
 
 fn parse_string(s: &mut Peekable<Iter<u8>>) -> Result<BData, ParseErr> {
-    let mut len = 0;
+    let mut len: usize = 0;
     loop {
         let v = s.next();
         match v {
             Some(b'0'..=b'9') => {
-                len = len * 10 + (v.unwrap() - b'0');
+                len = len * 10 + (v.unwrap() - b'0') as usize;
             }
             Some(b':') => {
                 break;
