@@ -276,7 +276,6 @@ fn stringify_dict(data: &BTreeMap<String, BData>) -> Result<Vec<u8>, &str> {
 mod test {
     use super::BData;
     use std::collections::BTreeMap;
-    use std::rc::Rc;
 
     fn parse_bstring(s: &str) -> Result<String, &str> {
         let v = super::parse(s.as_bytes().to_vec());
@@ -317,7 +316,7 @@ mod test {
         );
     }
 
-    fn parse_list(s: &str) -> Result<Rc<Vec<BData>>, &str> {
+    fn parse_list(s: &str) -> Result<Vec<BData>, &str> {
         let v = super::parse(s.as_bytes().to_vec());
         if let Ok(BData::List(rc)) = v {
             Ok(rc)
@@ -359,15 +358,15 @@ mod test {
             &vec![
                 BData::BString("abc".as_bytes().to_vec()),
                 BData::Number(32),
-                BData::List(Rc::new(vec![BData::BString("ab".as_bytes().to_vec())])),
+                BData::List(vec![BData::BString("ab".as_bytes().to_vec())]),
             ],
         );
     }
 
-    fn parse_dict(s: &str) -> Result<Rc<BTreeMap<String, BData>>, &str> {
+    fn parse_dict(s: &str) -> Result<BTreeMap<String, BData>, &str> {
         let v = super::parse(s.as_bytes().to_vec());
-        if let Ok(BData::Dict(rc)) = v {
-            Ok(rc)
+        if let Ok(BData::Dict(map)) = v {
+            Ok(map)
         } else {
             Err("err")
         }
@@ -375,14 +374,14 @@ mod test {
 
     fn parse_dict_check(s: &str, map: &BTreeMap<String, BData>) {
         let data = parse_dict(s);
-        if let Ok(m) = data {
-            let m = m.as_ref();
-            assert_eq!(m.len(), map.len());
-            m.iter().for_each(|x| {
-                assert_eq!(map.contains_key(x.0), true);
-                assert_eq!(x.1, map.get(x.0).unwrap());
-            });
-        }
+
+        let m = data.expect("parse dict failed");
+
+        assert_eq!(m.len(), map.len());
+        m.iter().for_each(|x| {
+            assert_eq!(map.contains_key(x.0), true);
+            assert_eq!(x.1, map.get(x.0).unwrap());
+        });
     }
 
     #[test]
@@ -399,7 +398,7 @@ mod test {
         let mut k2_list = Vec::new();
         k2_list.push(BData::BString("def".as_bytes().to_vec()));
         k2_list.push(BData::Number(-23));
-        m.insert("k2".to_string(), BData::List(Rc::new(k2_list)));
+        m.insert("k2".to_string(), BData::List(k2_list));
         parse_dict_check(source, &m);
     }
 
