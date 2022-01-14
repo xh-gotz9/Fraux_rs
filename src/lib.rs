@@ -19,7 +19,7 @@ pub enum ParseErr {
     ParseFailure(Box<dyn Error>),
 }
 
-pub fn parse(src: Vec<u8>) -> Result<BData, ParseErr> {
+pub fn parse(src: &Vec<u8>) -> Result<BData, ParseErr> {
     let mut peekable: Peekable<Iter<'_, u8>> = src.iter().peekable();
     let v = parse_data(&mut peekable);
     v
@@ -278,7 +278,7 @@ mod test {
     use std::collections::BTreeMap;
 
     fn parse_bstring(s: &str) -> Result<String, &str> {
-        let v = super::parse(s.as_bytes().to_vec());
+        let v = super::parse(&s.as_bytes().to_vec());
         if let Ok(BData::BString(data)) = v {
             Ok(String::from_utf8(data).unwrap())
         } else {
@@ -296,7 +296,7 @@ mod test {
     }
 
     fn parse_num(s: &str) -> Result<i32, &str> {
-        let v = super::parse(s.as_bytes().to_vec());
+        let v = super::parse(&s.as_bytes().to_vec());
         if let Ok(BData::Number(data)) = v {
             Ok(data)
         } else {
@@ -317,7 +317,7 @@ mod test {
     }
 
     fn parse_list(s: &str) -> Result<Vec<BData>, &str> {
-        let v = super::parse(s.as_bytes().to_vec());
+        let v = super::parse(&s.as_bytes().to_vec());
         if let Ok(BData::List(rc)) = v {
             Ok(rc)
         } else {
@@ -364,7 +364,7 @@ mod test {
     }
 
     fn parse_dict(s: &str) -> Result<BTreeMap<String, BData>, &str> {
-        let v = super::parse(s.as_bytes().to_vec());
+        let v = super::parse(&s.as_bytes().to_vec());
         if let Ok(BData::Dict(map)) = v {
             Ok(map)
         } else {
@@ -403,7 +403,7 @@ mod test {
     }
 
     fn assert_stringify(s: &str, assert_s: Vec<u8>) {
-        if let Ok(data) = super::parse(s.as_bytes().to_vec()) {
+        if let Ok(data) = super::parse(&s.as_bytes().to_vec()) {
             let stringify = super::stringify(&data);
             println!("parse: {}", s);
             if let Ok(st) = stringify {
